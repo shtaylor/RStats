@@ -1,0 +1,462 @@
+---
+title: "STAT 420 Week 1 - Homework"
+author: "Shane Taylor"
+date: '5/17/2019'
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+
+***
+
+## Exercise 1 (Subsetting and Statistics)
+
+For this exercise, we will use the `msleep` dataset from the `ggplot2` package.
+
+
+**(a)** Install and load the `ggplot2` package. **Do not** include the installation command in your `.Rmd` file. (If you do it will install the package every time you knit your file.) **Do** include the command to load the package into your environment.
+
+***
+
+##### **Solution 1a**
+
+```{r, message=FALSE}
+library(ggplot2)
+```
+
+***
+
+**(b)** Note that this dataset is technically a `tibble`, not a data frame. How many observations are in this dataset? How many variables? What are the observations in this dataset?
+
+***
+
+##### **Solution 1b**
+We will load the msleep dataset from ggplot 2
+
+```{r}
+msleep = ggplot2::msleep
+```
+
+
+- By running `nrow(msleep)` we can see thatthere are **`r nrow(msleep)`** observations in the msleep dataset. 
+- By running `ncol(msleep)` we can see that there are **`r ncol(msleep)`** variables. 
+- By running `?msleep` in RStudio we can see that in this dataset the observations are different types of **mammals**.
+
+***
+
+**(c)** What is the mean hours of REM sleep of individuals in this dataset?
+
+***
+
+##### **Solution 1c**
+
+If we attempt to run `mean(msleep$sleep_rem)` we get `r mean(msleep$sleep_rem)` because certain observations have "NA" as a value. We can circumvent this issue by using a logical vector to choose only those observations that have a legitimate double value. This [resource](https://www.statmethods.net/input/missingdata.html) provided a few ways of dealing with missing values. The resource showed a nice way of using an optional argument of the `mean()` function, but because I wanted practice in using logical vectors, I opted to use this line:
+
+```{r}
+mean(msleep[is.na(msleep$sleep_rem) == FALSE, ]$sleep_rem)
+```
+
+
+The other way of doing using the optional argument for `mean()` is:
+
+
+```{r}
+mean(msleep$sleep_rem, na.rm=TRUE)
+```
+
+Since I got the same answer both ways, I feel confident that my answer is correct.
+
+***
+
+**(d)** What is the standard deviation of brain weight of individuals in this dataset?
+
+***
+
+##### **Solution 1d**
+
+In a similar fashion I will do this with a logical vector:
+
+
+```{r}
+sd(msleep[is.na(msleep$brainwt) == FALSE, ]$brainwt)
+```
+
+And using the optional argument for `sd()` we get:
+
+
+```{r}
+sd(msleep$brainwt, na.rm = TRUE)
+```
+
+***
+
+**(e)** Which observation (provide the `name`) in this dataset gets the most REM sleep?
+
+***
+
+##### **Solution 1e**
+
+I had a hard time with this question because when I compared the values in `sleep_rem` to the max value, I found that if the value was `NA` then the comparison would hold true. Checking to make sure the value was not `NA` seemed to work:
+
+
+```{r}
+msleep[msleep$sleep_rem == max(msleep$sleep_rem , na.rm = TRUE) & is.na(msleep$sleep_rem) == FALSE, ]$name[1]
+```
+
+
+From this Stack Exchange [post](https://stackoverflow.com/questions/14487756/r-equality-while-ignoring-nas) I found that instead of using `==` I could use `%in%` and the comparison would return false when the value in `sleep_rem` was `NA`.
+
+```{r}
+msleep[msleep$sleep_rem %in% max(msleep$sleep_rem , na.rm = TRUE), ]$name[1]
+```
+
+***
+
+
+**(f)** What is the average bodyweight of carnivores in this dataset?
+
+***
+
+##### **Solution 1f**
+
+The average bodyweight of carnivores is calculated by `mean(msleep$bodywt, na.rm = TRUE)` which gives us **`r mean(msleep$bodywt, na.rm = TRUE)` kilograms**.
+
+***
+
+
+## Exercise 2 (Plotting)
+
+For this exercise, we will use the `birthwt` dataset from the `MASS` package.
+
+***
+
+**(a)** Note that this dataset is a data frame and all of the variables are numeric. How many observations are in this dataset? How many variables? What are the observations in this dataset?
+
+***
+
+##### **Solution 2a**
+
+First we shall load the package and dataset into our environment:
+
+```{r}
+library(MASS)
+birthwt = MASS::birthwt
+```
+
+
+- By running `nrow(birthwt)` we can see that there are **`r nrow(birthwt)`** observations.
+- By running `ncol(birthwt)` we can see that there are **`r ncol(birthwt)`** variables.
+- By running `?birthwt` in RStudio we can see that the observations are records of babies born with low birth weight and the existence of possible risk factors of the infant's mother.
+
+***
+
+**(b)** Create a scatter plot of birth weight (y-axis) vs mother's weight before pregnancy (x-axis). Use a non-default color for the points. (Also, be sure to give the plot a title and label the axes appropriately.) Based on the scatter plot, does there seem to be a relationship between the two variables? Briefly explain.
+
+***
+
+##### **Solution 2b**
+
+```{r}
+plot(bwt ~ lwt, data = birthwt,
+     main = "Infant Birth Weight vs Mother Weight Before Pregnancy",
+     xlab = "Mother Weight Before Pregnancy (pounds)",
+     ylab = "Infant Birth Weight (grams)",
+     pch = 20,
+     col = "red"
+)
+```
+
+By looking at the graph, there seems to be a **weak**, **positive**, **linear** relationship between *Mother Weight Before Pregnancy* and *Infant Birth Weight*. As you move to the right in the graph, there are fewer and fewer low values for infant birth weight. 
+
+***
+
+**(c)** Create a scatter plot of birth weight (y-axis) vs mother's age (x-axis). Use a non-default color for the points. (Also, be sure to give the plot a title and label the axes appropriately.) Based on the scatter plot, does there seem to be a relationship between the two variables? Briefly explain.
+
+***
+
+##### **Solution 2c**
+
+```{r}
+plot(bwt ~ age, data = birthwt,
+     main = "Infant Birth Weight vs Age of Mother",
+     xlab = "Age of Mother (years)",
+     ylab = "Infant Birth Weight (grams)",
+     pch = 20,
+     col = "darkgreen"
+)
+```
+
+Judging by the graph, I would say that there is a **weak**, **negative**, **linear** relationship between the age of the mother and the infant's birth weight. Notice how the upper bound of the birth weight stays relatively consistent as the age of the mother increases, but the lower bound of the infant birth weight decreases as the mother's age increases.
+
+
+***
+
+**(d)** Create side-by-side boxplots for birth weight grouped by smoking status. Use non-default colors for the plot. (Also, be sure to give the plot a title and label the axes appropriately.) Based on the boxplot, does there seem to be a difference in birth weight for mothers who smoked? Briefly explain.
+
+***
+
+##### **Solution 2d**
+
+
+```{r}
+boxplot(bwt ~ smoke , data = birthwt,
+        xlab = "Mother's smoker status (1 = Smoker, 0 = Not a smoker)",
+        ylab = "Infant Birth Weight (grams)",
+        main = "Mother's Smoker Status vs Infant Birth Weight",
+        pch = 20,
+        cex = 2,
+        col = "darkorange",
+        border = "dodgerblue")
+```
+
+The boxplot seems to provide evidence that the mother being a smoker negatively impacts the infant's birth weight. Notice that the median birth weight (indicated by the thick blue line within the orange section of the box) of the infants from a non-smoking mother is approximately 250 grams higher than the median birth weight of those from a mother who smokes. Additionally, the upper whisker for the birthweights of the infants of a non-smoking mother is roughly 750 grams higher than those who come from a mother who smokes.
+
+***
+
+## Exercise 3 (Importing Data, More Plotting)
+
+For this exercise we will use the data stored in [`nutrition-2018.csv`](nutrition-2018.csv). It contains the nutritional values per serving size for a large variety of foods as calculated by the USDA in 2018. It is a cleaned version totaling 5956 observations and is current as of April 2018.
+
+The variables in the dataset are:
+
+- `ID` 
+- `Desc` - short description of food
+- `Water` - in grams
+- `Calories` - in kcal
+- `Protein` - in grams
+- `Fat` - in grams
+- `Carbs` - carbohydrates, in grams
+- `Fiber` - in grams
+- `Sugar` - in grams
+- `Calcium` - in milligrams
+- `Potassium` - in milligrams
+- `Sodium` - in milligrams
+- `VitaminC` - vitamin C, in milligrams
+- `Chol` - cholesterol, in milligrams
+- `Portion` - description of standard serving size used in analysis
+
+**(a)** Create a histogram of `Calories`. Do not modify `R`'s default bin selection. Make the plot presentable. Describe the shape of the histogram. Do you notice anything unusual?
+
+***
+
+##### **Solution 3a**
+
+First let's import the dataset into a tibble:
+
+
+```{r}
+nutrition = read.csv("nutrition-2018.csv")
+```
+
+Now let's create the histogram:
+
+```{r}
+hist(nutrition$Calories,
+     xlab = "Calories",
+     main = "Frequency of Calories of Various Foods",
+     col = "red",
+     border = "black")
+```
+
+
+By looking at the graph we can see that in general as the calories increase, the frequencies of foods with that range of calories decrease. However, there seems to be a local peak in the 350-400 calorie range. I'm not quite sure why this is, and it would require more in-depth analysis to reach a conclusion.
+
+***
+
+**(b)** Create a scatter plot of calories (y-axis) vs protein (x-axis). Make the plot presentable. Do you notice any trends? Do you think that knowing only the protein content of a food, you could make a good prediction of the calories in the food?
+
+***
+
+##### **Solution 3b**
+
+```{r}
+plot(Calories ~ Protein, data = nutrition,
+     main = "Calories vs Protein",
+     xlab = "Protein (g)",
+     ylab = "Calories",
+     pch = 20,
+     col = "orange"
+)
+```
+
+While there is a lot of variation within the data, one pattern I noticed is that as the grams of protein increases, so too does the minimum corresponding number of calories. The variation is too great to make an accurate prediction of calories using grams of protein, but we can at least establish a lower bound for calories given the grams of protein.
+
+***
+
+**(c)** Create a scatter plot of `Calories` (y-axis) vs `4 * Protein + 4 * Carbs + 9 * Fat` (x-axis). Make the plot presentable. You will either need to add a new variable to the data frame, or use the `I()` function in your formula in the call to `plot()`. If you are at all familiar with nutrition, you may realize that this formula calculates the calorie count based on the protein, carbohydrate, and fat values. You'd expect then that the result here is a straight line. Is it? If not, can you think of any reasons why it is not?
+
+***
+
+##### **Solution 3c**
+
+```{r}
+plot(Calories ~ I(4*Protein + 4*Carbs + 9*Fat), data = nutrition,
+     main = "Calories vs 4*Protein + 4*Carbs + 9*Fat",
+     xlab = "4*Protein + 4*Carbs + 9*Fat",
+     ylab = "Calories",
+     pch = 20,
+     col = "dodgerblue"
+)
+```
+
+The scatterplot has a strong linear relationship, but there is still some variation. I'm not a nutrition expert, and without doing further analysis on the dataset, my guess is that the discrepancies are either caused by errors in the table or by inaccurate reporting. One other possibility, and I don't know exactly how this works, is that I've read before that when alcohol gets metabolized it gets converted into a sugar (carbohydrate) which turns into calories, but that it's not classified as a carbohydrate while it's still in its alcohol form.
+
+***
+
+## Exercise 4 (Writing and Using Functions)
+
+For each of the following parts, use the following vectors:
+
+```{r}
+a = 1:10
+b = 10:1
+c = rep(1, times = 10)
+d = 2 ^ (1:10)
+```
+
+**(a)** Write a function called `sum_of_squares`.
+
+- Arguments:
+    - A vector of numeric data `x`
+- Output:
+    - The sum of the squares of the elements of the vector $\sum_{i = 1}^n x_i^2$
+    
+Provide your function, as well as the result of running the following code:
+
+```{r, eval = FALSE}
+sum_of_squares(x = a)
+sum_of_squares(x = c(c, d))
+```
+
+***
+
+##### **Solution 4a**
+
+```{r}
+sum_of_squares = function(x){
+  result = x ^ 2
+  result = sum(result)
+  result
+}
+
+```
+
+Now we will use the above function to evaluate the requested calculations:
+
+```{r}
+sum_of_squares(x = a)
+sum_of_squares(x = c(c, d))
+```
+
+***
+
+**(b)** Using only your function `sum_of_squares()`, `mean()`, `sqrt()`, and basic math operations such as `+` and `-`, calculate
+
+\[
+\sqrt{\frac{1}{n}\sum_{i = 1}^n (x_i - 0)^{2}}
+\]
+
+where the $x$ vector is `d`.
+
+***
+
+##### **Solution 4b**
+
+```{r}
+sqrt(1/length(d) * sum_of_squares(d))
+```
+
+***
+
+**(c)** Using only your function `sum_of_squares()`, `mean()`, `sqrt()`, and basic math operations such as `+` and `-`, calculate
+
+\[
+\sqrt{\frac{1}{n}\sum_{i = 1}^n (x_i - y_i)^{2}}
+\]
+
+where the $x$ vector is `a` and the $y$ vector is `b`.
+
+***
+
+##### **Solution 4c**
+
+Since vectors a and b are the reverses of one another, they have the same length, so we will use `length(a)` for $n$
+
+```{r}
+sqrt(1/length(a) * sum_of_squares(a - b))
+```
+
+
+***
+
+## Exercise 5 (More Writing and Using Functions)
+
+For each of the following parts, use the following vectors:
+
+```{r}
+set.seed(42)
+x = 1:100
+y = rnorm(1000)
+z = runif(150, min = 0, max = 1)
+```
+
+**(a)** Write a function called `list_extreme_values`.
+
+- Arguments:
+    - A vector of numeric data `x`
+    - A positive constant, `k`, with a default value of `2`
+- Output:
+    - A list with two elements:
+        - `small`, a vector of elements of `x` that are $k$ sample standard deviations less than the sample mean. That is, the observations that are smaller than $\bar{x} - k \cdot s$.
+        - `large`, a vector of elements of `x` that are $k$ sample standard deviations greater than the sample mean. That is, the observations that are larger than $\bar{x} + k \cdot s$.
+
+Provide your function, as well as the result of running the following code:
+
+```{r, eval = FALSE}
+list_extreme_values(x = x, k = 1)
+list_extreme_values(x = y, k = 3)
+list_extreme_values(x = y, k = 2)
+list_extreme_values(x = z, k = 1.5)
+```
+
+***
+
+##### **Solution 5a**
+
+For this function we need to do some fancy subsetting. I don't expect any of the given vectors (x,y,z) have NA values, but it's easy enough to deal with them.
+
+```{r}
+list_extreme_values = function(x, k = 2){
+  xbar = mean(x, na.rm = TRUE)
+  xsd = sd(x, na.rm = TRUE)
+  small = x[x < xbar - k*xsd]
+  large = x[x > xbar + k*xsd]
+  list(small, large)
+}
+```
+
+
+```{r}
+list_extreme_values(x = x, k = 1)
+list_extreme_values(x = y, k = 3)
+list_extreme_values(x = y, k = 2)
+list_extreme_values(x = z, k = 1.5)
+```
+
+***
+
+**(b)** Using only your function `list_extreme_values()`, `mean()`, and basic list operations, calculate the mean of observations that are greater than 1.5 standard deviation above the mean in the vector `y`.
+
+***
+
+##### **Solution 5b**
+
+Since the second element in the list returned by `list_extreme_values` are the elements greater than $k$ standard deviations above the mean, we can simply run `mean()` on the second element from the returned list.
+
+```{r}
+mean(list_extreme_values(x = y, k = 1.5)[[2]])
+```
+

@@ -1,0 +1,684 @@
+---
+title: "Simulation Project"
+author: "Shane Taylor"
+date: "6/24/2019"
+output:
+  html_document:
+    fig_caption: yes
+---
+
+```{r, message=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+```
+
+```{r functions, include=FALSE}
+# A function for captioning and referencing images
+fig <- local({
+    i <- 0
+    ref <- list()
+    list(
+        cap=function(refName, text) {
+            i <<- i + 1
+            ref[[refName]] <<- i
+            paste("Figure ", i, ": ", text, sep="")
+        },
+        ref=function(refName) {
+            ref[[refName]]
+        })
+})
+```
+
+# Simulation Study 1
+
+### Introduction
+
+In this first simulation study we will be attempting to determine whether the significance of regression test is able to reliably identify a model with a linear relationship versus one with just random noise. We will simulate data using two models, one with non-zero beta parameters, and one with beta parameters all equal to zero. Each model will have 3 different levels of normally distributed errors that we will consider the "noise" within the data. We will be attempting to see if the F statistic, p, and $R^2$ values are able to help us accurately determine whether there exists a linear relationship within the simulated data for each model. If the F statistic, the p-value, and the R^2 values are accurate measures of the significance of a regression, then we should see that these values tell us which sets of data are linear in nature with some sort of reliability.
+
+Our significant model (the one that has a linear relationship) is:
+
+$$
+Y_i = \beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + \epsilon_i
+$$
+
+where $\epsilon_i \sim N(0,\sigma^2)$ and $\{\beta_0, \beta_1, \beta_2, \beta_3\} = \{3,1,1,1\}$.
+
+Our insignificant model (the one without a linear relationship) is:
+
+$$
+Y_i = \beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + \epsilon_i
+$$
+
+where $\epsilon_i \sim N(0,\sigma^2)$ and $\{\beta_0, \beta_1, \beta_2, \beta_3\} = \{3,0,0,0\}$. 
+
+Note that from here on out I will refer to the significant model as "model 1" and the insignificant model as "model 0".
+
+For each of these models, we will consider three possible values for $\sigma$, in particular $\sigma \in \{1,5,10\}$. We will generate 2500 simulations of 25 observations for each combination of model and value for $\sigma$, giving us in total 15,000 simulations. For each model we will record the F-statistic of the significance of regression test, the p-value for that F-statistic, and the $R^2$ value for the data. After we are done, we will analyze these three statistical values and determine whether they can accurately identify which models were generated with a linear relationship.
+
+### Methods
+
+We will use the same data for the predictors (the $x_i$'s) throughout the simulations, which is contained within the file `study_1.csv`. We begin by reading this data in for the predictors:
+
+```{r, message=FALSE}
+set.seed(01171992)
+study_1_data = read_csv("study_1.csv")
+```
+
+The following function, `ST_signif_of_regr_simulate()`, generalizes what we're trying to do in this study. The function parameters are: our predictors in the form of a data frame, a vector of the different values for the significant $\beta_i$'s, a vector of the different $\sigma$'s to test, and the number of simulations we run for each combination of model and $\sigma$. The function returns a data frame containing the following variable names: "model", "sigma", "F.statistic", "p.value", "r.squared".
+
+
+```{r}
+ST_signif_of_regr_simulate = function(test_data.frame, 
+                                    beta_predictors = 1, 
+                                    sigmas_to_test_with = 1, 
+                                    num_simulations_foreach_set_of_parameters = 1){
+  
+  n = nrow(test_data.frame)
+  
+  # Prediction matrix, used for multiplying the data by the simulation parameters
+  pred_matrix = data.matrix(test_data.frame)
+  
+  # We use the "y" column to hold 1's for multiplying by beta_0, just as a convenience
+  pred_matrix[,1] = rep(1, nrow(test_data.frame))
+  
+  sig_betas = cbind(beta_predictors)
+  non_sig_betas = cbind(c(beta_predictors[1], rep(0, length(beta_predictors) - 1)))
+  betas = list(non_sig_betas, sig_betas)
+  
+  # 0 for non-significant model, 1 for significant model
+  models = c(0,1)
+  
+  sigmas = sigmas_to_test_with
+  
+  num_sims = num_simulations_foreach_set_of_parameters
+  
+  total_sims = length(models) * length(sigmas) * num_sims
+  
+  results = data.frame("model" = rep(0, total_sims), 
+                       "sigma" = rep(0,total_sims), 
+                       "F.statistic" = rep(0, total_sims), 
+                       "p.value" = rep(0,total_sims), 
+                       "r.squared" = rep(0, total_sims))
+  # We want to keep track of which loop we're on, and use that number to insert into
+  # our data frame before it is returned.
+  current_sim_number = 1
+  
+  for (i in 1:length(models)) {
+    
+    # betas contains a vector the beta values for model 0 and model 1
+    current_model = betas[[i]]
+    
+    current_fitted = as.vector(pred_matrix %*% current_model)
+    
+    for (j in 1:length(sigmas)) {
+      
+      current_sigma = sigmas[j]
+      
+      for (k in 1:num_sims) {
+        
+        errors = rnorm(n, 0, current_sigma)
+        study_1_data$y = current_fitted + errors
+        current_sim_lm = lm(y ~ ., data = study_1_data)
+        current_sim_lm.summary = summary(current_sim_lm)
+        results$model[current_sim_number] = models[i]
+        results$sigma[current_sim_number] = current_sigma
+        results$F.statistic[current_sim_number] = current_sim_lm.summary$fstatistic[1]
+        
+        # The p-value is calculated using the pf() function.
+        # Unfortunately the p-value is not saved by the summary() function.
+        results$p.value[current_sim_number] = pf(current_sim_lm.summary$fstatistic[1],
+                                                 current_sim_lm.summary$fstatistic[2],
+                                                 current_sim_lm.summary$fstatistic[3],
+                                                 lower.tail = FALSE)
+        
+        results$r.squared[current_sim_number] = current_sim_lm.summary$r.squared
+        current_sim_number = current_sim_number + 1
+      }
+    }
+  }
+  results
+}
+
+simulation_summary = ST_signif_of_regr_simulate(test_data.frame = study_1_data, 
+                           beta_predictors = c(3,1,1,1), 
+                           sigmas_to_test_with = c(1,5,10), 
+                           num_simulations_foreach_set = 2500)
+```
+
+The above function will let us easily sort through the data. Now we just need to break the data down into the 6 sets we want to consider:
+
+```{r}
+model0_sigma1 = simulation_summary[(simulation_summary$model %in% 0) & (simulation_summary$sigma %in% 1 ), ]
+model0_sigma5 = simulation_summary[(simulation_summary$model %in% 0) & (simulation_summary$sigma %in% 5 ), ]
+model0_sigma10 = simulation_summary[(simulation_summary$model %in% 0) & (simulation_summary$sigma %in% 10 ), ]
+model1_sigma1 = simulation_summary[(simulation_summary$model %in% 1) & (simulation_summary$sigma %in% 1 ), ]
+model1_sigma5 = simulation_summary[(simulation_summary$model %in% 1) & (simulation_summary$sigma %in% 5 ), ]
+model1_sigma10 = simulation_summary[(simulation_summary$model %in% 1) & (simulation_summary$sigma %in% 10 ), ]
+```
+
+
+### Results
+
+We will begin analyzing our results by looking at the distributions of the F-statistic, the p-value, and the $R^2$ value for each of the 6 sets. First let's look at the distribution of the F-statistic critical values:
+
+```{r f_hist, fig.align = "center", fig.cap=fig$cap("f_hist", "Distribution of F-statistic critical values")}
+par(mfrow = c(3, 2))
+
+hist(model0_sigma1$F.statistic, main = "model=0, sigma=1", xlab = "F-statistic", breaks = 100, )
+
+hist(model0_sigma5$F.statistic, main = "model=0, sigma=5", xlab = "F-statistic", breaks = 100)
+
+hist(model0_sigma10$F.statistic, main = "model=0, sigma=10", xlab = "F-statistic", breaks = 100)
+
+hist(model1_sigma1$F.statistic, main = "model=1, sigma=1", xlab = "F-statistic", breaks = 100)
+
+hist(model1_sigma5$F.statistic, main = "model=1, sigma=5", xlab = "F-statistic", breaks = 100)
+
+hist(model1_sigma10$F.statistic, main = "model=1, sigma=10", xlab = "F-statistic", breaks = 100)
+
+```
+
+Next, let's look at the distribution for the p-values:
+
+```{r p_val_hist, fig.align = "center", fig.cap=fig$cap("p_val_hist", "Distribution of p-values")}
+par(mfrow = c(3, 2))
+
+hist(model0_sigma1$p.value, main = "model=0, sigma=1", xlab = "p-value", breaks = 100, )
+
+hist(model0_sigma5$p.value, main = "model=0, sigma=5", xlab = "p-value", breaks = 100)
+
+hist(model0_sigma10$p.value, main = "model=0, sigma=10", xlab = "p-value", breaks = 100)
+
+hist(model1_sigma1$p.value, main = "model=1, sigma=1", xlab = "p-value", breaks = 100)
+
+hist(model1_sigma5$p.value, main = "model=1, sigma=5", xlab = "p-value", breaks = 100)
+
+hist(model1_sigma10$p.value, main = "model=1, sigma=10", xlab = "p-value", breaks = 100)
+
+```
+
+And finally, let's look at the distribution for the $R^2$ values:
+
+```{r r_sq_hist, fig.align = "center", fig.cap=fig$cap("r_sq_hist", "Distribution of R^2 values")}
+par(mfrow = c(3, 2))
+
+hist(model0_sigma1$r.squared, main = "model=0, sigma=1", xlab = "r.squared", breaks = 100, )
+
+hist(model0_sigma5$r.squared, main = "model=0, sigma=5", xlab = "r.squared", breaks = 100)
+
+hist(model0_sigma10$r.squared, main = "model=0, sigma=10", xlab = "r.squared", breaks = 100)
+
+hist(model1_sigma1$r.squared, main = "model=1, sigma=1", xlab = "r.squared", breaks = 100)
+
+hist(model1_sigma5$r.squared, main = "model=1, sigma=5", xlab = "r.squared", breaks = 100)
+
+hist(model1_sigma10$r.squared, main = "model=1, sigma=10", xlab = "r.squared", breaks = 100)
+
+```
+
+Assuming a significance level $\alpha = 0.05$, let's also look at the proportion of simulations that would have rejected the null hypothesis:
+
+```{r}
+m0_s1_prop = mean(model0_sigma1$p.value < 0.05)
+m0_s5_prop = mean(model0_sigma5$p.value < 0.05)
+m0_s10_prop = mean(model0_sigma10$p.value < 0.05)
+m1_s1_prop = mean(model1_sigma1$p.value < 0.05)
+m1_s5_prop = mean(model1_sigma5$p.value < 0.05)
+m1_s10_prop = mean(model1_sigma10$p.value < 0.05)
+prop_frame = data.frame()
+prop_frame["model 0 sigma 1", "Proportion"] = m0_s1_prop
+prop_frame["model 0 sigma 5", "Proportion"] = m0_s5_prop
+prop_frame["model 0 sigma 10", "Proportion"] = m0_s10_prop
+prop_frame["model 1 sigma 1", "Proportion"] = m1_s1_prop
+prop_frame["model 1 sigma 5", "Proportion"] = m1_s5_prop
+prop_frame["model 1 sigma 10", "Proportion"] = m1_s10_prop
+
+kable(prop_frame, caption = "Table 1") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+Finally, I'd like to create some summary tables. I'll write a function to do this quickly.
+
+```{r}
+
+summary_table = function(mydata){
+  st = data.frame("statistic" = c("mean", "median","sd", "min", "max"), 
+                  "F.statistic" = rep(0,5), 
+                  "p.value" = rep(0,5), 
+                  "r.squared" = rep(0,5),
+                  row.names = 1)
+  st["mean", ] = as.vector(sapply(mydata, mean)[3:5])
+  st["median", ] = as.vector(sapply(mydata, median)[3:5])
+  st["sd", ] = as.vector(sapply(mydata, sd)[3:5])
+  st["min", ] = as.vector(sapply(mydata, min)[3:5])
+  st["max", ] = as.vector(sapply(mydata, max)[3:5])
+  st
+}
+
+m0_s1.st = summary_table(model0_sigma1)
+m0_s5.st = summary_table(model0_sigma5)
+m0_s10.st = summary_table(model0_sigma10)
+m1_s1.st = summary_table(model1_sigma1)
+m1_s5.st = summary_table(model1_sigma5)
+m1_s10.st = summary_table(model1_sigma10)
+
+```
+
+
+### Discussion
+
+There are several interesting patterns to notice in the data summarized above. Starting with the F-statistic (Figure `r fig$ref("f_hist")`) we can see by looking at the scale on the x-axis that the distribution is much more closely shifted towards 0 for the distributions using model 0. When you get to model 1 however, you can see that the range of values along the x-axis increases quite a bit. We can also see that the distribution spreads out more to the right, thus telling us that we have a greater concentration of larger F values in the distributions from model 1. As the F critical value gets larger, the corresponding p-value gets smaller, so this indicates that we have a higher likelihood of rejecting the null hypothesis for model 1.
+
+continuing on, we look at Figure `r fig$ref("p_val_hist")` which shows the distribution of p-values. For all three levels of $\sigma$, the distribution of the p-values for model 0 is relatively uniform. While for model 1, there is a clear pattern to the distribution. Also, the mean of distributions of p-values for model 1 is much closer to 0 than it is for those from model 0. When we look at Table 1, we can see that only about 5% of the simulations for model 0 rejected the null hypothesis, whereas for model 1, when $\sigma$ = 1, we had 100% of all simulations reject the null hypothesis. However, as $\sigma$ gets larger for model 1, we can see in table 1 that the proportion of simulations from model 1 does decrease substantially. One conclusion you can make from this fact is that too large of a variance can increase the likelihood of not rejecting the null hypothesis when you should have.
+
+Next we look at the distributions of $R^2$ for the various models/$\sigma$'s. There are two interesting observations to make here. The first is that for model 0, all three distributions look relatively similar. This is exactly what we would expect, since model 0 is all just noise anyways, so it makes sense that the coefficient of determination is roughly similar for all three. The next interesting observation is for the distributions from model 1. As $\sigma$ increases, we can see distribution move to the right, indicating that less and less of the relationship between the points can be explained by the linear relationship. This makes perfect sense too, because the increased variability somewhat overtakes the underlying linear relationship. Finally, after reading around, it has been made clear to me that the $R^2$ value is a proper statistic, and thus follows some sort of distribution. From my reading, it seems that the distribution it most closely follows is what's called the Beta distribution.
+
+In particular, we have that 
+
+$$
+R^2 \sim Beta\left (\frac {k-1}{2}, \frac {n-k}{2}\right)
+$$
+where k counts the regressor coefficients *without* the constant term. So in our case, we will have $k = 3$. 
+
+# Simulation Study 2
+
+### Introduction
+
+In most situations you don't know beforehand which parts of your data are actual significant parameters in predicting the output, which is why it's good to be able to compare multiple models to see which one makes the most accurate predictions. One way to do this is by using what is called the root mean square error, or RMSE for short. The formula for RMSE is:
+
+$$
+\text{RMSE}(\text{model, data}) = \sqrt{\frac{1}{n} \sum_{i = 1}^{n}(y_i - \hat{y}_i)^2}
+$$
+
+We will be running multiple simulations to try and compare on average if this measure accurately identifies which model is best. Our "true" model will use 6 parameters, with $\beta_0 = 0$, but our data will have 9 variables, which means three of them won't affect the output. We will be using differing levels of normally-distributed error with different standard deviations. We will be training our models on a part of the total data, and apply those same models to "test" data where we will see how well it predicts the output via the RMSE. We will be splitting our data into two sets randomly for each simulation in an attempt to get a well-rounded view with our simulations.
+
+### Methods
+
+
+
+```{r, message=FALSE}
+set.seed(01171992)
+
+full_data = read_csv("study_2.csv")
+
+# We use this matrix to calculate the fitted values.
+# We use the y-column for beta_0 since it's just 0 anyways
+prediction_matrix = data.matrix(full_data)
+
+betas = cbind(c(0, 5, -4, 1.6, -1.1, 0.7, 0.3, 0, 0, 0))
+fittedvalues = as.vector(prediction_matrix %*% betas)
+
+# Takes a model, the train_data, the test_data, and returns a
+# vector (trn.rmse, test.rmse)
+calc_rmse = function(model, train_data, test_data){
+  trn.rmse = sqrt(sum(summary(model)$residuals^2)/nrow(train_data))
+  test.rmse = sqrt(sum((test_data$y - predict.lm(model, newdata = test_data))^2) / nrow(test_data))
+  c(trn.rmse, test.rmse)
+}
+
+# Takes a value for sigma and returns a data frame containing
+# the test and train rmse's for all 9 models.
+simulate_rmse = function(sig){
+  zeroes_1000 = rep(0, 1000)
+  output_dataframe = data.frame("m1.trn.rmse" = zeroes_1000,
+                              "m1.test.rmse" = zeroes_1000,
+                              "m2.trn.rmse" = zeroes_1000,
+                              "m2.test.rmse" = zeroes_1000,
+                              "m3.trn.rmse" = zeroes_1000,
+                              "m3.test.rmse" = zeroes_1000,
+                              "m4.trn.rmse" = zeroes_1000,
+                              "m4.test.rmse" = zeroes_1000,
+                              "m5.trn.rmse" = zeroes_1000,
+                              "m5.test.rmse" = zeroes_1000,
+                              "m6.trn.rmse" = zeroes_1000,
+                              "m6.test.rmse" = zeroes_1000,
+                              "m7.trn.rmse" = zeroes_1000,
+                              "m7.test.rmse" = zeroes_1000,
+                              "m8.trn.rmse" = zeroes_1000,
+                              "m8.test.rmse" = zeroes_1000,
+                              "m9.trn.rmse" = zeroes_1000,
+                              "m9.test.rmse" = zeroes_1000)
+  
+  for (i in 1:1000) {
+    full_data$y = fittedvalues + rnorm(500, 0, sig)
+    trn_idx = sample(1:500, 250)
+    trn = full_data[trn_idx, ]
+    test = full_data[-trn_idx, ]
+    
+    m1 = lm(y ~ x1, data = trn)
+    m2 = lm(y ~ x1 + x2 , data = trn)
+    m3 = lm(y ~ x1 + x2 + x3, data = trn)
+    m4 = lm(y ~ x1 + x2 + x3 + x4, data = trn)
+    m5 = lm(y ~ x1 + x2 + x3 + x4 + x5, data = trn)
+    m6 = lm(y ~ x1 + x2 + x3 + x4 + x5 + x6, data = trn)
+    m7 = lm(y ~ x1 + x2 + x3 + x4 + x5 + x6 + x7, data = trn)
+    m8 = lm(y ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, data = trn)
+    m9 = lm(y ~ x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, data = trn)
+    
+    output_dataframe[i,] = c(calc_rmse(m1, trn, test),
+                             calc_rmse(m2, trn, test),
+                             calc_rmse(m3, trn, test),
+                             calc_rmse(m4, trn, test),
+                             calc_rmse(m5, trn, test),
+                             calc_rmse(m6, trn, test),
+                             calc_rmse(m7, trn, test),
+                             calc_rmse(m8, trn, test),
+                             calc_rmse(m9, trn, test))
+  }
+  output_dataframe
+}
+
+# Returns a named vector containing the average of the rmse's for
+# the different models.
+calc_average_rmse = function(rmse_dataframe){
+  v = rep(0, ncol(rmse_dataframe))
+  names(v) = names(rmse_dataframe)
+  for (i in 1:ncol(rmse_dataframe)) {
+    v[i] = mean(rmse_dataframe[,i])
+  }
+  v
+}
+
+rmse_dataframe_sigma1 = simulate_rmse(1)
+rmse_dataframe_sigma2 = simulate_rmse(2)
+rmse_dataframe_sigma4 = simulate_rmse(4)
+
+rmse_sigma1_avg = calc_average_rmse(rmse_dataframe_sigma1)
+rmse_sigma2_avg = calc_average_rmse(rmse_dataframe_sigma2)
+rmse_sigma4_avg = calc_average_rmse(rmse_dataframe_sigma4)
+
+
+
+```
+
+(Note: I just realized I forgot to keep track of number of times each model was chosen as the best. Sorry for the strange looking code.)
+```{r}
+#FALSE TRUE
+rmse_sigma_1_counts = rep(0,9)
+for (i in 1:nrow(rmse_dataframe_sigma1)) {
+  rmse_sigma_1_counts[which.min(rmse_dataframe_sigma1[i,rep(c(FALSE,TRUE),9)])] = rmse_sigma_1_counts[which.min(rmse_dataframe_sigma1[i,rep(c(FALSE,TRUE),9)])] + 1
+}
+rmse_sigma_2_counts = rep(0,9)
+for (i in 1:nrow(rmse_dataframe_sigma2)) {
+  rmse_sigma_2_counts[which.min(rmse_dataframe_sigma2[i,rep(c(FALSE,TRUE),9)])] = rmse_sigma_2_counts[which.min(rmse_dataframe_sigma2[i,rep(c(FALSE,TRUE),9)])] + 1
+}
+rmse_sigma_4_counts = rep(0,9)
+for (i in 1:nrow(rmse_dataframe_sigma4)) {
+  rmse_sigma_4_counts[which.min(rmse_dataframe_sigma4[i,rep(c(FALSE,TRUE),9)])] = rmse_sigma_4_counts[which.min(rmse_dataframe_sigma4[i,rep(c(FALSE,TRUE),9)])] + 1
+}
+
+
+```
+
+
+### Results
+
+First let's look at the distribution of our data when $\sigma = 1$. The following is a boxplot for the 9 different models
+
+```{r rmse_test_boxplot_1, fig.align = "center", fig.cap=fig$cap("rmse_test_boxplot_1", "Distribution of RMSE for models 1-9 of the test data -- sigma=1")}
+
+boxplot(rmse_dataframe_sigma1[,2], 
+        rmse_dataframe_sigma1[,4], 
+        rmse_dataframe_sigma1[,6], 
+        rmse_dataframe_sigma1[,8], 
+        rmse_dataframe_sigma1[,10],  
+        rmse_dataframe_sigma1[,12], 
+        rmse_dataframe_sigma1[,14], 
+        rmse_dataframe_sigma1[,16], 
+        rmse_dataframe_sigma1[,18], xaxt="n")
+axis(1, at = 1:9, labels = 1:9)
+```
+
+Now, we will look at the RMSE for both the training and test data:
+
+```{r rmse_averages_1, fig.align = "center", fig.cap=fig$cap("rmse_averages_1", "Averages of RMSE for models 1-9 -- sigma=1")}
+
+x = 1:9
+plot(x, rmse_sigma1_avg[c(TRUE,FALSE)], 
+     ylab = "RMSE", col = "red", xaxt="n", xlab = "Model number")
+points(x,rmse_sigma1_avg[c(FALSE,TRUE)], col = "dodgerblue")
+axis(1, at = 1:9, labels = 1:9)
+legend("topright", inset = .02,legend = c("train", "test"), col = c("red", "dodgerblue"), pch = 1, cex=0.8)
+```
+
+We will repeat the process for $\sigma = 2$:
+
+```{r rmse_test_boxplot_2, fig.align = "center", fig.cap=fig$cap("rmse_test_boxplot_2", "Distribution of RMSE for models 1-9 of the test data -- sigma=2")}
+
+boxplot(rmse_dataframe_sigma2[,2], 
+        rmse_dataframe_sigma2[,4], 
+        rmse_dataframe_sigma2[,6], 
+        rmse_dataframe_sigma2[,8], 
+        rmse_dataframe_sigma2[,10],  
+        rmse_dataframe_sigma2[,12], 
+        rmse_dataframe_sigma2[,14], 
+        rmse_dataframe_sigma2[,16], 
+        rmse_dataframe_sigma2[,18], xaxt="n")
+axis(1, at = 1:9, labels = 1:9)
+```
+
+```{r rmse_averages_2, fig.align = "center", fig.cap=fig$cap("rmse_averages_2", "Averages of RMSE for models 1-9 -- sigma=2")}
+
+x = 1:9
+plot(x, rmse_sigma2_avg[c(TRUE,FALSE)], 
+     ylab = "RMSE", col = "red", xaxt="n", xlab = "Model number")
+points(x,rmse_sigma2_avg[c(FALSE,TRUE)], col = "dodgerblue")
+axis(1, at = 1:9, labels = 1:9)
+legend("topright", inset = .02,legend = c("train", "test"), col = c("red", "dodgerblue"), pch = 1, cex=0.8)
+```
+
+And for $\sigma = 2$:
+
+```{r rmse_test_boxplot_4, fig.align = "center", fig.cap=fig$cap("rmse_test_boxplot_4", "Distribution of RMSE for models 1-9 of the test data, sigma=4")}
+
+boxplot(rmse_dataframe_sigma4[,2], 
+        rmse_dataframe_sigma4[,4], 
+        rmse_dataframe_sigma4[,6], 
+        rmse_dataframe_sigma4[,8], 
+        rmse_dataframe_sigma4[,10],  
+        rmse_dataframe_sigma4[,12], 
+        rmse_dataframe_sigma4[,14], 
+        rmse_dataframe_sigma4[,16], 
+        rmse_dataframe_sigma4[,18], xaxt="n")
+axis(1, at = 1:9, labels = 1:9)
+```
+
+```{r rmse_averages_4, fig.align = "center", fig.cap=fig$cap("rmse_averages_1", "Averages of RMSE for models 1-9,  sigma=4")}
+
+x = 1:9
+plot(x, rmse_sigma4_avg[c(TRUE,FALSE)], 
+     ylab = "RMSE", col = "red", xaxt="n", xlab = "Model number")
+points(x,rmse_sigma4_avg[c(FALSE,TRUE)], col = "dodgerblue")
+axis(1, at = 1:9, labels = 1:9)
+legend("topright", inset = .02,legend = c("train", "test"), col = c("red", "dodgerblue"), pch = 1, cex=0.8)
+```
+
+Now, let's see a numerical comparison for the averages of the RMSE for our three different levels of $\sigma$:
+
+```{r, fig.align="center"}
+
+rmse_sigma1_avg_table =data.frame(cbind(1:9, matrix(rmse_sigma1_avg, ncol = 2, byrow = TRUE)))
+names(rmse_sigma1_avg_table) = c("model", "train", "test")
+kable(rmse_sigma1_avg_table, caption = "Table 2 : sigma=1") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+rmse_sigma2_avg_table =data.frame(cbind(1:9, matrix(rmse_sigma2_avg, ncol = 2, byrow = TRUE)))
+names(rmse_sigma2_avg_table) = c("model", "train", "test")
+kable(rmse_sigma2_avg_table, caption = "Table 3 : sigma=2") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+rmse_sigma4_avg_table =data.frame(cbind(1:9, matrix(rmse_sigma4_avg, ncol = 2, byrow = TRUE)))
+names(rmse_sigma4_avg_table) = c("model", "train", "test")
+kable(rmse_sigma4_avg_table, caption = "Table 4 : sigma=4") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+```
+
+And finally, let's see how many times each model was chosen
+
+```{r}
+counts = rbind(rmse_sigma_1_counts, rmse_sigma_2_counts, rmse_sigma_4_counts)
+colnames(counts) = c("m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9")
+rownames(counts) = c("sigma = 1", "sigma = 2", "sigma = 3")
+kable(counts, caption = "Table 5 : Number of times each model was chosen") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+### Discussion
+
+There are a handful of interesting things to notice about the results of this simulation. The first and foremost is our main conclusion evident in Tables 2, 3, and 4 which shows that the correct model (model 6) has the lowest average RMSE in the test data. This indicates that empirically, the true model makes the most accurate predictions on average. This provides strong evidence that the RMSE is a good measure of fitness on average.
+
+Additionally, it should be noted that true model often does not have the lowest RMSE because of the normally-distributed variation present within the data. One conclusion we can draw from this fact is that it might be a good idea to often run through multiple different partitions of the data into the training and test data, since the true model is only the best on average, not for an individual trial. The amount of normally distributed variation, or noise, present within the data also affects how big the RMSE is, which is to be expected. One fact that I noticed is that the larger the variance, the smaller the gap from model 5 to model 6 is. This means that in data with a lot of variation, it can be harder to assess exactly which model is the best.
+
+Finally, we can see in Table 5 that for all sigma values that model 6 was chosen the most number of times. One possible outcome of this is that instead of comparing the average RMSE's for each model, we could instead choose the "best" model by choosing the one that was chosen the most overall.
+
+# Simulation Study 3
+
+### Introduction
+
+Another way to determine how good a model is to calculate its "Power", which can measured empirically as such:
+
+$$
+\hat{\text{Power}} = \hat{P}[\text{Reject } H_0 \mid H_1 \text{ True}] = \frac{\text{# Tests Rejected}}{\text{# Simulations}}
+$$
+
+We will consider the simple model $Y_i = \beta_0 + \beta_1 x_i + \epsilon_i$ for different values of $\beta$, $n$, and $\sigma$ and attempt to determine how these three parameters affect our measure of power. In particular we will consider 1000 simulations for every combination of:
+
+- $\beta_1 \in (-2, -1.9, -1.8, \ldots, -0.1, 0, 0.1, 0.2, 0.3, \ldots 1.9, 2)$
+- $\sigma \in (1, 2, 4)$
+- $n \in (10, 20, 30)$
+
+and measure the power of each.
+
+### Methods
+
+
+```{r}
+
+set.seed(01171992)
+beta1 = seq(-2,2, by = .1)
+sigmas = c(1,2,4)
+n = c(10,20,30)
+
+zeroes = rep(0, 1000*length(beta1)*length(sigmas)*length(n))
+
+power_sim_matrix = cbind(zeroes, zeroes, zeroes, zeroes)
+colnames(power_sim_matrix) = c("sigma", "n", "beta_1", "p.value")
+
+counter = 1
+for (s in sigmas) {
+  print(paste("sigma=", s))
+  
+  for (num in n) {
+    
+    x_values = seq(0, 5, length = num)
+    dat = data.frame("y" = rep(0,num), "x" = x_values)
+    for (b in beta1) {
+      fittedvals = x_values * b
+      for (i in 1:1000) {
+        dat$y = fittedvals + rnorm(num, 0, s)
+        dat.lm = lm(y ~ x, data = dat)
+        power_sim_matrix[counter,] = c(s,
+                                       num,
+                                       b,
+                                       summary(dat.lm)$coefficients[2,4])
+        counter = counter + 1
+      }
+    }
+  }
+}
+
+```
+
+```{r}
+power_sim_df = data.frame(power_sim_matrix)
+```
+
+Now we just need to split up our data into the applicable sets and calculate the power:
+
+```{r}
+sigma1_n10 = power_sim_df[power_sim_df$sigma %in% 1 & power_sim_df$n %in% 10, ]
+sigma1_n20 = power_sim_df[power_sim_df$sigma %in% 1 & power_sim_df$n %in% 20, ]
+sigma1_n30 = power_sim_df[power_sim_df$sigma %in% 1 & power_sim_df$n %in% 30, ]
+sigma2_n10 = power_sim_df[power_sim_df$sigma %in% 2 & power_sim_df$n %in% 10, ]
+sigma2_n20 = power_sim_df[power_sim_df$sigma %in% 2 & power_sim_df$n %in% 20, ]
+sigma2_n30 = power_sim_df[power_sim_df$sigma %in% 2 & power_sim_df$n %in% 30, ]
+sigma4_n10 = power_sim_df[power_sim_df$sigma %in% 4 & power_sim_df$n %in% 10, ]
+sigma4_n20 = power_sim_df[power_sim_df$sigma %in% 4 & power_sim_df$n %in% 20, ]
+sigma4_n30 = power_sim_df[power_sim_df$sigma %in% 4 & power_sim_df$n %in% 30, ]
+
+
+sigma1_n10_beta.power = rep(0,length(beta1))
+sigma1_n20_beta.power = rep(0,length(beta1))
+sigma1_n30_beta.power = rep(0,length(beta1))
+sigma2_n10_beta.power = rep(0,length(beta1))
+sigma2_n20_beta.power = rep(0,length(beta1))
+sigma2_n30_beta.power = rep(0,length(beta1))
+sigma4_n10_beta.power = rep(0,length(beta1))
+sigma4_n20_beta.power = rep(0,length(beta1))
+sigma4_n30_beta.power = rep(0,length(beta1))
+
+for (i in 1:length(beta1)) {
+  stub1_10 = sigma1_n10[sigma1_n10$beta_1 %in% beta1[i], ]
+  stub1_20 = sigma1_n20[sigma1_n20$beta_1 %in% beta1[i], ]
+  stub1_30 = sigma1_n30[sigma1_n30$beta_1 %in% beta1[i], ]
+  stub2_10 = sigma2_n10[sigma2_n10$beta_1 %in% beta1[i], ]
+  stub2_20 = sigma2_n20[sigma2_n20$beta_1 %in% beta1[i], ]
+  stub2_30 = sigma2_n30[sigma2_n30$beta_1 %in% beta1[i], ]
+  stub4_10 = sigma4_n10[sigma4_n10$beta_1 %in% beta1[i], ]
+  stub4_20 = sigma4_n20[sigma4_n20$beta_1 %in% beta1[i], ]
+  stub4_30 = sigma4_n30[sigma4_n30$beta_1 %in% beta1[i], ]
+  sigma1_n10_beta.power[i] = mean(stub1_10$p.value > 0.05)
+  sigma1_n20_beta.power[i] = mean(stub1_20$p.value > 0.05)
+  sigma1_n30_beta.power[i] = mean(stub1_30$p.value > 0.05)
+  sigma2_n10_beta.power[i] = mean(stub2_10$p.value > 0.05)
+  sigma2_n20_beta.power[i] = mean(stub2_20$p.value > 0.05)
+  sigma2_n30_beta.power[i] = mean(stub2_30$p.value > 0.05)
+  sigma4_n10_beta.power[i] = mean(stub4_10$p.value > 0.05)
+  sigma4_n20_beta.power[i] = mean(stub4_20$p.value > 0.05)
+  sigma4_n30_beta.power[i] = mean(stub4_30$p.value > 0.05)
+}
+
+
+
+```
+
+### Results
+
+First we'll look at the power curve for $\sigma = 1$:
+
+```{r power_sigma1, fig.align = "center", fig.cap=fig$cap("power_sigma1", "Power for different values of beta_1 and n, sigma=1")}
+plot(x = beta1, y = sigma1_n10_beta.power, col = "red", xlab = "beta_1", ylab = "power")
+points(x = beta1, y = sigma1_n20_beta.power, col = "darkorange")
+points(x = beta1, y = sigma1_n30_beta.power, col = "dodgerblue")
+legend("topright", inset = .02,legend = c("n = 10", "n = 20", "n = 30"), col = c("red", "darkorange", "dodgerblue"), pch = 1, cex=0.8)
+```
+
+
+Then we'll look at the power curve for $\sigma = 2$:
+
+
+```{r power_sigma2, fig.align = "center", fig.cap=fig$cap("power_sigma2", "Power for different values of beta_1 and n, sigma=2")}
+plot(x = beta1, y = sigma2_n10_beta.power, col = "red", xlab = "beta_1", ylab = "power")
+points(x = beta1, y = sigma2_n20_beta.power, col = "darkorange")
+points(x = beta1, y = sigma2_n30_beta.power, col = "dodgerblue")
+legend("topright", inset = .02,legend = c("n = 10", "n = 20", "n = 30"), col = c("red", "darkorange", "dodgerblue"), pch = 1, cex=0.8)
+```
+
+
+Finally we'll look at the power curve for $\sigma = 4$:
+
+
+```{r power_sigma4, fig.align = "center", fig.cap=fig$cap("power_sigma4", "Power for different values of beta_1 and n, sigma=4")}
+plot(x = beta1, y = sigma4_n10_beta.power, col = "red", xlab = "beta_1", ylab = "power")
+points(x = beta1, y = sigma4_n20_beta.power, col = "darkorange")
+points(x = beta1, y = sigma4_n30_beta.power, col = "dodgerblue")
+legend("topright", inset = .02,legend = c("n = 10", "n = 20", "n = 30"), col = c("red", "darkorange", "dodgerblue"), pch = 1, cex=0.8)
+```
+
+### Discussion
+
+What we can see in Figures `r fig$ref("power_sigma1")`, `r fig$ref("power_sigma2")`, and `r fig$ref("power_sigma1")` is that as $\sigma$ increases, the "power curve" gets fatter. Additionally, in all three graphs we can see that the higher the number of samples, the tighter the curve is as well. As $\beta_1$ moves towards 0 we see that more and more and more of the tests were rejected, which makes sense since a $\beta_1$ close to 0 can look more like noise than can one further away from 0. 
+
+I would say that 1000 trials was sufficient, because we can clearly the see the pattern present in the power curve. Perhaps if $\sigma$ got bigger, we might need to run more simulation though because by the time $\sigma$ got to 4, the power curve was starting to look a little less well-defined. 
