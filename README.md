@@ -1,2 +1,2 @@
 # RStats
-Statistics in R
+Statistics in R for STAT 420 @ UIUC
